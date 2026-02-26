@@ -1,0 +1,15 @@
+spacy
+spacy_curated_transformers
+cupy-cuda12x
+scikit-learn
+python-crfsuite
+torch==2.7.1
+torchinfo
+transformers==4.57.3
+accelerate
+bitsandbytes
+peft
+datasets
+
+#also required, after installing spacy:
+#python3 -m spacy download en_core_web_trf
