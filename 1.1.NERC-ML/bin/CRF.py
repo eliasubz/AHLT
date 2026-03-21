@@ -30,6 +30,10 @@ class CRF:
             c1 = float(params['c1']) if 'c1' in params else 0.1
             c2 = float(params['c2']) if 'c2' in params else 1.0
             eps = float(params['epsilon']) if 'epsilon' in params else 0.00001
+            # Repeat sequences containing drug_n labels to mimic class weighting.
+            self.drug_n_oversample = int(params['drug_n_oversample']) if 'drug_n_oversample' in params else 1
+            if self.drug_n_oversample < 1:
+                self.drug_n_oversample = 1
             # select needed parametes depending on the agorithm
             params = {'feature.minfreq' : minf, 'max_iterations' : maxit}
             if alg == "lbfgs" : params['c1'] = c1
@@ -44,9 +48,14 @@ class CRF:
     def train(self, datafile):
         # load dataset
         ds = Dataset(datafile)
+        if not hasattr(self, 'drug_n_oversample'):
+            self.drug_n_oversample = 1
         # add examples to trainer
         for xseq, yseq, _ in ds.instances() :
-            self.trainer.append(xseq, yseq, 0)
+            # Oversample sequences with minority labels to increase their training impact.
+            repeats = self.drug_n_oversample if ('B-drug_n' in yseq or 'I-drug_n' in yseq) else 1
+            for _ in range(repeats):
+                self.trainer.append(xseq, yseq, 0)
 
         # train and store model 
         self.trainer.train(self.modelfile, -1)

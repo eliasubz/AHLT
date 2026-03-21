@@ -14,7 +14,7 @@ class Dictionaries() :
       if filename is not None :
           if filename.endswith(".json") :
               # parameter is a pickle file, load it
-              with open(filename) as pf:
+              with open(filename, encoding='utf-8') as pf:
                   self.data = json.load(pf)
           else :
               print("ERROR. Expected .json file", file = sys.stderr)

@@ -22,6 +22,7 @@ from dictionaries import Dictionaries
 #
 #  You can add hyperparameters for each of the algorithms training
 #    - for CRF: algorithm, feature.minfreq, c1, c2, max_iterations, epsilon
+#               drug_n_oversample (repeat factor for sequences with B/I-drug_n)
 #               More details about parameters at:
 #               https://sklearn-crfsuite.readthedocs.io/en/latest/api.html
 #    - for MEM: C, solver, max_iter, n_jobs
@@ -56,7 +57,6 @@ from dictionaries import Dictionaries
 #
 
 import paths
-sys.path.append(paths.UTIL)
 from evaluator import evaluate
 
 # extract training hyperparameters from command line

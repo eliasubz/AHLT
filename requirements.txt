@@ -1,6 +1,5 @@
 spacy
 spacy_curated_transformers
-cupy-cuda12x
 scikit-learn
 python-crfsuite
 torch==2.7.1

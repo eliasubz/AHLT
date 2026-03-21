@@ -34,12 +34,38 @@ class SVM:
             degree = int(params['degree']) if 'degree' in params else 3
             gamma = float(params['gamma']) if 'gamma' in params else 'scale'
                 
-            # create classifier
+            # CHANGED: Replaced class_weight='balanced' with a manual per-class map.
+            # Reason: balanced weighting increased false positives for other minority classes
+            # (especially 'group'), reducing overall F1.
+
+            # CHANGED: Manual class weights for each BIO label.
+            # Most labels keep weight 1.0 (same effective behavior as unweighted SVC).
+            # Only drug_n labels are upweighted to improve drug_n recall.
+            #cw = {
+                 # Non-entity label keeps default cost.
+                #'O': 1.0,
+
+                # Standard drug labels keep default cost.
+                #'B-drug': 1.0, 'I-drug': 1.0,
+
+                # Brand labels keep default cost.
+                #'B-brand': 1.0, 'I-brand': 1.0,
+
+                # Group labels keep default cost (prevents overprediction seen with 'balanced').
+                #'B-group': 1.0, 'I-group': 1.0,
+
+                # CHANGED: drug_n labels are upweighted to fight class imbalance (~16:1 vs drug).
+                # This increases the penalty for missing drug_n tokens.
+                #'B-drug_n': 8.0, 'I-drug_n': 8.0,
+            #}
+
+            # CHANGED: class_weight now uses the custom dictionary above.
             self.tagger = SVC(verbose=True,
                               C=C,
                               kernel=kernel,
                               degree=degree,
                               gamma=gamma
+                              #class_weight=cw
                               )
 
 
