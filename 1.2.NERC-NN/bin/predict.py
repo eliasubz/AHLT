@@ -80,14 +80,14 @@ def predict(modelname, datafile, params, outfile) :
 ## --
 
 if __name__ == "__main__" :
-    modelname = sys.argv[1]
-    datafile= sys.argv[2]
-    outfile= sys.argv[3]
+   modelname = sys.argv[1]
+   datafile= sys.argv[2]
+   outfile= sys.argv[3]
 
-    params={}
-    for p in sys.argv[4:] :
-       k,v = p.split("=")
-       params[k]=int(v)
+   params={}
+   for p in sys.argv[4:] :
+      k,v = p.split("=")
+      params[k]=int(v)
 
-    predict(modelname, datafile, params, outfile)
+   predict(modelname, datafile, params, outfile)
 

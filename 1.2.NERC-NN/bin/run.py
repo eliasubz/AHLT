@@ -42,6 +42,15 @@ UTILDIR=os.path.join(MAINDIR,"util") # down to "util"
 sys.path.append(UTILDIR)
 from evaluator import evaluate
 
+search_space = {
+    "hidden_size": [64, 128, 256],
+    # "num_layers": [1, 2, 3],
+    "num_layers": [1],
+    # "dropout": [0.1, 0.2, 0.3],
+    "dropout": [0.2],
+    "emb_sizes": [(100, 100, 50)]#, (128, 128, 64)] 
+}
+
 # extract training hyperparameters from command line
 print("read params")
 params = {}
@@ -49,8 +58,17 @@ for p in sys.argv[1:]:
     if "=" in p:
         par,val = p.split("=")
         params[par] = val
+        if par in ["batch_size", "max_len", "suf_len", "epochs"] :
+            params[par] = int(val)  
         
 if "name" not in params: params["name"]="mymodel_000"
+
+
+def get_model_name(p):
+    """Generates a unique name based on architecture params"""
+    # e.g., model_h128_l2_d0.1_e100-100-50
+    e_str = "-".join(map(str, p['emb_sizes']))
+    return f"model_h{p['hidden_size']}_l{p['num_layers']}_d{p['dropout']}_e{e_str}"
 
 # if feature extraction is required, do it
 if "parse" in sys.argv[1:] :
@@ -73,15 +91,45 @@ if "parse" in sys.argv[1:] :
 
     
 # for each required model, see if training or prediction are required
-   
 if "train" in sys.argv[1:] :
     os.makedirs(os.path.join(NERDIR,"models"), exist_ok=True)
     # train model
-    print(f"Training model {params['name']} ...")
-    do_train(os.path.join(NERDIR, "preprocessed","train.pck"),
-             os.path.join(NERDIR, "preprocessed","devel.pck"),
-             params,
-             os.path.join(NERDIR,"models",params["name"]))
+    for h in search_space["hidden_size"]:
+        for l in search_space["num_layers"]:
+            for d in search_space["dropout"]:
+                for e in search_space["emb_sizes"]:
+                    
+                    # Update current params for this specific run
+                    current_params = params.copy()
+                    current_params.update({
+                        "hidden_size": h,
+                        "num_layers": l,
+                        "dropout": d,
+                        "emb_sizes": e
+                    })
+                    
+                    model_name = get_model_name(current_params)
+                    current_params["name"] = model_name
+                    model_path = os.path.join(NERDIR, "models", model_name)
+
+                    # Skip if already trained
+                    if os.path.exists(os.path.join(model_path, "network.nn")):
+                        print(f"Skipping {model_name}, already trained.")
+                        continue
+
+                    print(f"\n{'='*40}\nTraining: {model_name}\n{'='*40}")
+                    try:
+                        do_train(
+                            os.path.join(NERDIR, "preprocessed", "train.pck"),
+                            os.path.join(NERDIR, "preprocessed", "devel.pck"),
+                            current_params,
+                            model_path
+                        )
+                        # Clear GPU memory between runs
+                        torch.cuda.empty_cache()
+                    except Exception as err:
+                        print(f"Failed to train {model_name}: {err}")
+
     
 if "predict" in sys.argv[1:] :    
     os.makedirs(os.path.join(NERDIR,"results"), exist_ok=True)
@@ -118,3 +166,24 @@ if "predict" in sys.argv[1:] :
                  os.path.join(NERDIR,"results","train-"+model+".out"),
                  os.path.join(NERDIR,"results","train-"+model+".stats"))
         '''
+if "predict_all" in sys.argv[1:]:
+    os.makedirs(os.path.join(NERDIR, "results"), exist_ok=True)
+    model_dir = os.path.join(NERDIR, "models")
+    
+    if os.path.exists(model_dir):
+        for model_item in os.listdir(model_dir):
+            curr_model_path = os.path.join(model_dir, model_item)
+            if not os.path.isdir(curr_model_path): continue
+
+            dataset_type = "test" if "test" in sys.argv[1:] else "devel"
+            out_file = os.path.join(NERDIR, "results", f"{dataset_type}-{model_item}.out")
+            stat_file = os.path.join(NERDIR, "results", f"{dataset_type}-{model_item}.stats")
+
+            if not os.path.exists(out_file):
+                print(f"Predicting for: {model_item}")
+                predict(curr_model_path, 
+                        os.path.join(NERDIR, "preprocessed", f"{dataset_type}.pck"),
+                        params, out_file)
+                
+                from evaluator import evaluate
+                evaluate("NER", os.path.join(DATADIR, f"{dataset_type}.xml"), out_file, stat_file)

@@ -1,2 +1,7 @@
 __pychache__.*
 *.pyc
+*.stats
+*.out
+*.nn
+*.idx
+*.pck
