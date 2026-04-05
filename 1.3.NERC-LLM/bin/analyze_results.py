@@ -90,12 +90,13 @@ def parse_filename(fname):
     """
     Parses a stats filename into a metadata dict.
     Handles:
-        FS-{model}-{prompt}-{shots}-{testdata}[-quant].stats
-        FT-{model}[-quant]-{testdata}.stats
+        FS-{model}-{prompt}-{shots}-{testdata}[-diverse][-quant].stats
+        FT-{model}-{prompt}[-quant]-{testdata}.stats
     """
     base = os.path.splitext(os.path.basename(fname))[0]
     meta = {"filename": base, "type": "?", "model": "?",
-            "prompt": "-", "shots": "-", "testdata": "?", "quant": False}
+            "prompt": "-", "shots": "-", "testdata": "?",
+            "diverse": False, "quant": False}
 
     parts = base.split("-")
     if not parts:
@@ -104,22 +105,22 @@ def parse_filename(fname):
     meta["type"] = parts[0]  # FS or FT
 
     if meta["type"] == "FS" and len(parts) >= 5:
-        # FS - model - prompt - shots - testdata [- quant]
+        # FS - model - prompt - shots - testdata [-diverse] [-quant]
         meta["model"]    = parts[1]
         meta["prompt"]   = parts[2]
         meta["shots"]    = parts[3]
         meta["testdata"] = parts[4]
-        meta["quant"]    = len(parts) > 5 and parts[5] == "quant"
+        flags = set(parts[5:])
+        meta["diverse"]  = "diverse" in flags
+        meta["quant"]    = "quant"   in flags
 
-    elif meta["type"] == "FT" and len(parts) >= 3:
-        # FT - model [- quant] - testdata
-        if parts[-2] == "quant":
-            meta["model"]    = parts[1]
-            meta["quant"]    = True
-            meta["testdata"] = parts[-1]
-        else:
-            meta["model"]    = parts[1]
-            meta["testdata"] = parts[-1]
+    elif meta["type"] == "FT" and len(parts) >= 4:
+        # FT - model - prompt [-quant] - testdata
+        meta["model"]    = parts[1]
+        meta["prompt"]   = parts[2]
+        flags = set(parts[3:-1])
+        meta["quant"]    = "quant" in flags
+        meta["testdata"] = parts[-1]
 
     return meta
 
@@ -156,7 +157,7 @@ def main():
         sys.exit(0)
 
     # ---- Print table ----
-    col_order = ["type", "model", "prompt", "shots", "testdata", "quant",
+    col_order = ["type", "model", "prompt", "shots", "diverse", "testdata", "quant",
                  "precision", "recall", "f1",
                  "drug_f1", "group_f1", "brand_f1", "drug_n_f1"]
 
@@ -207,6 +208,8 @@ def main():
                     parts.append(row.get("prompt",""))
                 if str(row.get("shots", "-")) != "-":
                     parts.append(f"{row.get('shots','')}shot")
+                if row.get("diverse", False):
+                    parts.append("diverse")
                 if row.get("quant", False):
                     parts.append("quant")
                 return "\n".join(parts)
