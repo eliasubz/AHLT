@@ -18,9 +18,10 @@ TEST=$3
 WEIGHTS=$4
 QUANT=$5
 
+PROMPTBASE=$(basename $PROMPTS .json)
 python3 finetune-inference.py $MODEL $PROMPTS $TEST $WEIGHTS $QUANT
 if (test $? != 0); then exit; fi
 
-python3 ../../../util/evaluator.py NER ../../../data/$TEST.xml  ../results/FT-${MODEL}${QUANT}-${TEST}.out ../results/FT-${MODEL}${QUANT}-${TEST}.stats
+python3 ../../../util/evaluator.py NER ../../../data/$TEST.xml  ../results/FT-${MODEL}-${PROMPTBASE}${QUANT}-${TEST}.out ../results/FT-${MODEL}-${PROMPTBASE}${QUANT}-${TEST}.stats
 
 deactivate

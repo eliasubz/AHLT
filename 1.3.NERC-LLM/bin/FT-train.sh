@@ -18,6 +18,7 @@ TRAIN=$3
 TEST=$4
 QUANT=$5
 
+PROMPTBASE=$(basename $PROMPTS .json)
 python3 finetune-train.py $MODEL $PROMPTS $TRAIN $TEST $QUANT
 if (test $? != 0); then exit; fi
 
