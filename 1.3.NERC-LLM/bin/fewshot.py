@@ -72,8 +72,9 @@ print(f"Processed {len(annotated)} examples in {time.time()-t0:.1f} seconds. ({(
 
 os.makedirs(paths.RESULTS, exist_ok=True)
 quant = "-quant" if quantized else ""
+promptbase = os.path.splitext(os.path.basename(promptfile))[0]
 outfname = os.path.join(paths.RESULTS,
-                        f"FS-{model}-{num_few_shot}-{testdata}{quant}")
+                        f"FS-{model}-{promptbase}-{num_few_shot}-{testdata}{quant}")
 with open(outfname+".json", "w") as of:  
    json.dump(annotated, of, indent=1, ensure_ascii=False)
 with open(outfname+".out", "w") as of:  

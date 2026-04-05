@@ -22,6 +22,7 @@ QUANT=$6
 python3 fewshot.py $MODEL $PROMPTS $SHOTS $TRAIN $TEST $QUANT
 if (test $? != 0); then exit; fi
 
-python3 ../../../util/evaluator.py NER ../../../data/$TEST.xml  ../results/FS-$MODEL-$SHOTS-${TEST}${QUANT}.out ../results/FS-$MODEL-$SHOTS-${TEST}${QUANT}.stats
+PROMPTBASE=$(basename $PROMPTS .json)
+python3 ../../../util/evaluator.py NER ../../../data/$TEST.xml  ../results/FS-$MODEL-${PROMPTBASE}-$SHOTS-${TEST}${QUANT}.out ../results/FS-$MODEL-${PROMPTBASE}-$SHOTS-${TEST}${QUANT}.stats
 
 deactivate
