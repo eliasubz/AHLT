@@ -35,7 +35,7 @@ prompts = Prompts(promptfile)
 
 # load model and tokenizer
 t0 = time.time()
-MODEL_PATH = f"/scratch/nas/1/PDI/mml0/models/{model}"
+MODEL_PATH = paths.resolve_llm_model_path(model)
 engine = FineTuning(MODEL_PATH, quantized=quantized)
 print(f"Model loading took {time.time()-t0:.1f} seconds", file=sys.stderr)
 
@@ -54,7 +54,8 @@ print(f"Dataset loading took {time.time()-t0:.1f} seconds", file=sys.stderr)
 t0 = time.time()
 os.makedirs(paths.MODELS, exist_ok=True)
 quant="-quant" if quantized else ""
-outputdir = os.path.join(paths.MODELS, f"FT-{model}{quant}.weights")
+slug = paths.model_slug(model)
+outputdir = os.path.join(paths.MODELS, f"FT-{slug}{quant}.weights")
 engine.train(train_dataset,
              val_dataset, 
              outputdir) 

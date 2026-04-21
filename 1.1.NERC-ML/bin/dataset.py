@@ -2,6 +2,31 @@ import scipy
 #from scipy.sparse import csr_matrix
 
 
+def feature_template(feature_name):
+    """Map a feature value (e.g. suf3=ine) to its template (e.g. suf3)."""
+    return feature_name.split('=', 1)[0] if '=' in feature_name else feature_name
+
+
+def read_top_features(rank_file, top_k=100):
+    """Read top-k feature templates or instantiated features from an MI ranking TSV file."""
+    selected = set()
+    with open(rank_file, encoding="utf-8") as rf:
+        # Skip header
+        next(rf, None)
+        for line in rf:
+            line = line.strip()
+            if not line:
+                continue
+            fields = line.split('\t')
+            if len(fields) < 2:
+                continue
+            # Keep the exact feature name (works for both templates and instantiated features)
+            selected.add(fields[1])
+            if len(selected) >= top_k:
+                break
+    return selected
+
+
 #-------------------------------------------
 # Class to handle a dataset made of sentences, where
 # each sentence is a sequence of words, and each word
@@ -10,11 +35,15 @@ import scipy
 class Dataset :
 
     ## ------ Constructor. Load given datafile & index features.
-    def __init__(self, datafile) :
+    def __init__(self, datafile, allowed_features=None) :
         self.fidx = {}
         self.sentences = []
         with open(datafile) as df :
             for xseq, yseq, toks in self.__sequences(df):
+                if allowed_features is not None:
+                    # Keep a feature if its exact string is allowed, 
+                    # OR if its underlying template is allowed.
+                    xseq = [[f for f in w if f in allowed_features or feature_template(f) in allowed_features] for w in xseq] 
                 # load pair
                 self.sentences.append((xseq,yseq,toks))
                 # add features to index

@@ -48,7 +48,7 @@ t0 = time.time()
 if ollama:
    engine = Inference(model, ollama=True)
 else :
-   MODEL_PATH = f"/scratch/nas/1/PDI/mml0/models/{model}"
+   MODEL_PATH = paths.resolve_llm_model_path(model)
    engine = Inference(MODEL_PATH, quantized=quantized)
 print(f"Model loading took {time.time()-t0:.1f} seconds", file=sys.stderr)
 
@@ -72,8 +72,9 @@ print(f"Processed {len(annotated)} examples in {time.time()-t0:.1f} seconds. ({(
 
 os.makedirs(paths.RESULTS, exist_ok=True)
 quant = "-quant" if quantized else ""
+slug = paths.model_slug(model)
 outfname = os.path.join(paths.RESULTS,
-                        f"FS-{model}-{num_few_shot}-{testdata}{quant}")
+                        f"FS-{slug}-{num_few_shot}-{testdata}{quant}")
 with open(outfname+".json", "w") as of:  
    json.dump(annotated, of, indent=1, ensure_ascii=False)
 with open(outfname+".out", "w") as of:  

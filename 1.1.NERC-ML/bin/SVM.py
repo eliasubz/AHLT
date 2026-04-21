@@ -3,6 +3,7 @@
 #####################################################
 import sys
 import pickle
+import os
 
 import scipy
 import sklearn
@@ -33,6 +34,8 @@ class SVM:
             kernel = params['kernel'] if 'kernel' in params else 'rbf'
             degree = int(params['degree']) if 'degree' in params else 3
             gamma = float(params['gamma']) if 'gamma' in params else 'scale'
+            self.top_features_file = params['top_features_file'] if 'top_features_file' in params else None
+            self.top_features_k = int(params['top_features_k']) if 'top_features_k' in params else 100
                 
             # CHANGED: Replaced class_weight='balanced' with a manual per-class map.
             # Reason: balanced weighting increased false positives for other minority classes
@@ -73,8 +76,14 @@ class SVM:
     ## train a model on given data, store in modelfile
     ## --------------------------------------------------
     def train(self, datafile):
+        allowed_features = None
+        if hasattr(self, 'top_features_file') and self.top_features_file:
+            if not os.path.exists(self.top_features_file):
+                raise FileNotFoundError(f"Top-feature ranking file not found: {self.top_features_file}")
+            allowed_features = dataset.read_top_features(self.top_features_file, self.top_features_k)
+
         # load dataset
-        ds = dataset.Dataset(datafile)
+        ds = dataset.Dataset(datafile, allowed_features=allowed_features)
         self.fidx = ds.feature_index()
 
         # Read training instances 

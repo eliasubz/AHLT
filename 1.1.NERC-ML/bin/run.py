@@ -2,10 +2,11 @@
 
 import sys, os
 
-from extract_features import extract_features
+from extract_features import extract_features, parse_feature_flags_param
 from train import train
 from predict import predict
 from dictionaries import Dictionaries
+import paths
 
 ##########################################################
 #
@@ -20,7 +21,16 @@ from dictionaries import Dictionaries
 #    - train: Train a ML model
 #    - predict: Apply the model to development data set and evaluate performance
 #
+#  Optional run isolation and feature ablation:
+#    - run_id=<slug>  -> preprocessed/runs/<slug>/, models/runs/<slug>/, results/runs/<slug>/
+#    - feature_flags=a,b,c  -> only listed ablation groups ON (others OFF).
+#        Omit feature_flags entirely -> all groups ON (default).
+#        feature_flags=  (empty) -> all groups OFF (base profile).
+#      Keys: med_patterns, stopwords, external_phrase, affix5_alpha, length_extras, length_next
+#
 #  You can add hyperparameters for each of the algorithms training
+#    - common: top_features_file, top_features_k
+#              (defaults: results/devel.template_mi.tsv and 100)
 #    - for CRF: algorithm, feature.minfreq, c1, c2, max_iterations, epsilon
 #               drug_n_oversample (repeat factor for sequences with B/I-drug_n)
 #               More details about parameters at:
@@ -37,13 +47,18 @@ from dictionaries import Dictionaries
 #
 #  Examples:
 #
-#      # Extract features, train, and evaluate a CRF model
-#      python3 run.py extract
-#      python3 run.py train CRF max_iterations=50
-#      python3 run.py predict CRF
+#      # Extract features, train, and evaluate a CRF model (context_window is required)
+#      python3 run.py extract train predict CRF context_window=1
+#      python3 run.py train predict CRF context_window=1
 #
-#      # the 3 lines above can be run in a single one:
-#      python3 run.py extract train predict CRF max_iterations=50
+#      # Isolated run with metrics paths under results/runs/<id>/
+#      python3 run.py extract train predict CRF context_window=1 run_id=exp01
+#
+#      # Ablation: only med_patterns + stopwords on, rest off
+#      python3 run.py extract train predict CRF context_window=1 run_id=exp02 feature_flags=med_patterns,stopwords
+#
+#      # Full automated grid (base, singletons, cumulative ladder); from bin/:
+#      python3 sweep_runs.py
 #
 #      # Extract train, and evaluate a SVM model (assumig features were already extracted)
 #      python3 run.py train predict SVM C=10 kernel=rbf
@@ -56,7 +71,6 @@ from dictionaries import Dictionaries
 #      python3 run.py kernel=rbf CRF extract C=10 predict SVM max_iterations=50 train
 #
 
-import paths
 from evaluator import evaluate
 
 # extract training hyperparameters from command line
@@ -67,6 +81,22 @@ for p in sys.argv[1:]:
         par,val = p.split("=")
         params[par] = val
 
+run_id = (params.get("run_id") or "").strip() or None
+feature_flags = parse_feature_flags_param(params.get("feature_flags"))
+
+if run_id:
+    run_preprocess_dir = os.path.join(paths.PREPROCESS, "runs", run_id)
+    run_models_dir = os.path.join(paths.MODELS, "runs", run_id)
+    run_results_dir = os.path.join(paths.RESULTS, "runs", run_id)
+else:
+    run_preprocess_dir = paths.PREPROCESS
+    run_models_dir = paths.MODELS
+    run_results_dir = paths.RESULTS
+
+train_feat = os.path.join(run_preprocess_dir, "train.feat")
+devel_feat = os.path.join(run_preprocess_dir, "devel.feat")
+test_feat = os.path.join(run_preprocess_dir, "test.feat")
+
 # if creting dictionaries is required, do it
 if "dicts" in sys.argv[1:] :
    print("Creating dictionaries")
@@ -75,21 +105,39 @@ if "dicts" in sys.argv[1:] :
 
 # if feature extraction is required, do it
 if "extract" in sys.argv[1:] :
+    if "context_window" not in params:
+        raise ValueError("context_window must be specified, e.g. context_window=1")
+    context_window = int(params["context_window"])
+    print(f"Using context_window={context_window} for feature extraction")
+    if run_id:
+        print(f"run_id={run_id} (isolated preprocessed/models/results)")
+    os.makedirs(run_preprocess_dir, exist_ok=True)
+
     # if test is required, extract features from test
     if "test" in sys.argv[1:] :
         print("Extracting features for test...")
-        extract_features(os.path.join(paths.DATA,"test.xml"), 
-                         os.path.join(paths.PREPROCESS,"test.feat"))
+        extract_features(
+            os.path.join(paths.DATA, "test.xml"),
+            test_feat,
+            context_window,
+            feature_flags,
+        )
 
     else : # otherwise, extract features for train and devel
-        os.makedirs(paths.PREPROCESS, exist_ok=True)
-        # convert datasets to feature vectors
         print("Extracting features for train...")
-        extract_features(os.path.join(paths.DATA,"train.xml"),
-                         os.path.join(paths.PREPROCESS,"train.feat"))
+        extract_features(
+            os.path.join(paths.DATA, "train.xml"),
+            train_feat,
+            context_window,
+            feature_flags,
+        )
         print("Extracting features for devel...")
-        extract_features(os.path.join(paths.DATA,"devel.xml"), 
-                         os.path.join(paths.PREPROCESS,"devel.feat"))
+        extract_features(
+            os.path.join(paths.DATA, "devel.xml"),
+            devel_feat,
+            context_window,
+            feature_flags,
+        )
 
     
 # for each required model, see if training or prediction are required
@@ -97,36 +145,37 @@ for model in ["CRF", "SVM", "MEM"] :
     if model not in sys.argv[1:] : continue
    
     if "train" in sys.argv[1:] :
-        os.makedirs(paths.MODELS, exist_ok=True)
+        os.makedirs(run_models_dir, exist_ok=True)
         # train model
         print(f"Training {model} model...")
-        train(os.path.join(paths.PREPROCESS,"train.feat"), params,
-              os.path.join(paths.MODELS,"model."+model))
+        modelfile = os.path.join(run_models_dir, "model." + model)
+        train(train_feat, params, modelfile)
         
     if "predict" in sys.argv[1:] :    
-        os.makedirs(paths.RESULTS, exist_ok=True)
+        os.makedirs(run_results_dir, exist_ok=True)
+        modelfile = os.path.join(run_models_dir, "model." + model)
         if "test" in sys.argv[1:] :
             if "test" in sys.argv[1:] :
                 # run model on test data and evaluate results
                 print(f"Running {model} model...")
-                predict(os.path.join(paths.PREPROCESS,"test.feat"),
-                        os.path.join(paths.MODELS,"model."+model),
-                        os.path.join(paths.RESULTS,"test-"+model+".out"))
+                test_out = os.path.join(run_results_dir, "test-" + model + ".out")
+                test_stats = os.path.join(run_results_dir, "test-" + model + ".stats")
+                predict(test_feat, modelfile, test_out)
                 evaluate("NER", 
                          os.path.join(paths.DATA,"test.xml"),
-                         os.path.join(paths.RESULTS,"test-"+model+".out"),
-                         os.path.join(paths.RESULTS,"test-"+model+".stats"))
+                         test_out,
+                         test_stats)
                          
         else :
             # run model on devel data and evaluate results
             print(f"Running {model} model...")
-            predict(os.path.join(paths.PREPROCESS,"devel.feat"),
-                   os.path.join(paths.MODELS,"model."+model),
-                   os.path.join(paths.RESULTS,"devel-"+model+".out"))
+            devel_out = os.path.join(run_results_dir, "devel-" + model + ".out")
+            devel_stats = os.path.join(run_results_dir, "devel-" + model + ".stats")
+            predict(devel_feat, modelfile, devel_out)
             evaluate("NER", 
                      os.path.join(paths.DATA,"devel.xml"),
-                     os.path.join(paths.RESULTS,"devel-"+model+".out"),
-                     os.path.join(paths.RESULTS,"devel-"+model+".stats"))
+                     devel_out,
+                     devel_stats)
 
             '''
             # run model on train data and evaluate results

@@ -5,3 +5,4 @@ __pychache__.*
 *.nn
 *.idx
 *.pck
+.venv

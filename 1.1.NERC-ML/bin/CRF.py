@@ -3,6 +3,7 @@
 #####################################################
 
 import sys
+import os
 import pycrfsuite
 from dataset import *
 
@@ -26,10 +27,12 @@ class CRF:
             # extract parameters if provided. Use default if not
             alg = params['algorithm'] if 'algorithm' in params else 'lbfgs'
             minf = int(params['feature.minfreq']) if 'feature.minfreq' in params else 1
-            maxit =  int(params['max_iterations']) if 'max_iterations' in params else 9999999
+            maxit =  int(params['max_iterations']) if 'max_iterations' in params else 300
             c1 = float(params['c1']) if 'c1' in params else 0.1
             c2 = float(params['c2']) if 'c2' in params else 1.0
             eps = float(params['epsilon']) if 'epsilon' in params else 0.00001
+            self.top_features_file = params['top_features_file'] if 'top_features_file' in params else None
+            self.top_features_k = int(params['top_features_k']) if 'top_features_k' in params else 100
             # Repeat sequences containing drug_n labels to mimic class weighting.
             self.drug_n_oversample = int(params['drug_n_oversample']) if 'drug_n_oversample' in params else 1
             if self.drug_n_oversample < 1:
@@ -46,8 +49,14 @@ class CRF:
     ## train a model on given data, store in modelfile
     ## --------------------------------------------------
     def train(self, datafile):
+        allowed_features = None
+        if hasattr(self, 'top_features_file') and self.top_features_file:
+            if not os.path.exists(self.top_features_file):
+                raise FileNotFoundError(f"Top-feature ranking file not found: {self.top_features_file}")
+            allowed_features = read_top_features(self.top_features_file, self.top_features_k)
+
         # load dataset
-        ds = Dataset(datafile)
+        ds = Dataset(datafile, allowed_features=allowed_features)
         if not hasattr(self, 'drug_n_oversample'):
             self.drug_n_oversample = 1
         # add examples to trainer

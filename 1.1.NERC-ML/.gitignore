@@ -1,0 +1,5 @@
+# Generated experiment artifacts (run_id sweeps)
+preprocessed/runs/
+models/runs/
+results/runs/
+results/sweep_metrics.tsv

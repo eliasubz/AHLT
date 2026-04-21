@@ -44,7 +44,7 @@ test = Examples(testfile, "NER")
 
 # load model and tokenizer
 t0 = time.time()
-MODEL_PATH = f"/scratch/nas/1/PDI/mml0/models/{model}"
+MODEL_PATH = paths.resolve_llm_model_path(model)
 engine = Inference(MODEL_PATH, quantized=quantized, peft=weightdir)
 print(f"Model loading took {time.time()-t0:.1f} seconds", file=sys.stderr)
 
@@ -69,8 +69,9 @@ print(f"Processed {len(annotated)} examples in {time.time()-t0:.1f} seconds. ({(
 # save output
 os.makedirs(paths.RESULTS, exist_ok=True)
 quant = "-quant" if quantized else ""
+slug = paths.model_slug(model)
 outfname = os.path.join(paths.RESULTS,
-                        f"FT-{model}{quant}-{testdata}")
+                        f"FT-{slug}{quant}-{testdata}")
 with open(outfname+".json", "w") as of:
    json.dump(annotated, of, indent=1, ensure_ascii=False)
 with open(outfname+".out", "w") as of:  

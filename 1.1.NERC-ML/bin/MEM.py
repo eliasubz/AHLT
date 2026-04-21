@@ -3,6 +3,7 @@
 #####################################################
 import sys
 import pickle
+import os
 
 import scipy
 import sklearn
@@ -31,7 +32,9 @@ class MEM:
             # extract parameters if provided. Use default if not
             C = float(params['C']) if 'C' in params else 1.0
             solver = params['solver'] if 'solver' in params else 'lbfgs'
-            maxit = params['max_iter'] if 'max_iter' in params else 1500
+            maxit = int(params['max_iter']) if 'max_iter' in params else 1500
+            self.top_features_file = params['top_features_file'] if 'top_features_file' in params else None
+            self.top_features_k = int(params['top_features_k']) if 'top_features_k' in params else 100
 
             # create and train empty classifier with given parameters
             self.tagger = LogisticRegression(verbose=1,
@@ -44,8 +47,14 @@ class MEM:
     ## train a model on given data, store in modelfile
     ## --------------------------------------------------
     def train(self, datafile):
+        allowed_features = None
+        if hasattr(self, 'top_features_file') and self.top_features_file:
+            if not os.path.exists(self.top_features_file):
+                raise FileNotFoundError(f"Top-feature ranking file not found: {self.top_features_file}")
+            allowed_features = dataset.read_top_features(self.top_features_file, self.top_features_k)
+
         # load dataset
-        ds = dataset.Dataset(datafile)
+        ds = dataset.Dataset(datafile, allowed_features=allowed_features)
         self.fidx = ds.feature_index()
 
         # Read training instances 
