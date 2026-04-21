@@ -73,29 +73,29 @@ class Examples() :
           
                                      
     # ------------ select given number of FS examples -----------------
-    def select_examples(self, numFS=-1, balanced=False) :
+    def select_examples(self, numFS=-1, balanced=False, strategy="random") :
         random.seed(12345)
-        
+
         if balanced and self.task == "NER" :
-            print(f"'balanced' not applicable for NER. Ignored", file=sys.stderr)
+            print(f"'balanced' not applicable for NER. Use strategy='diverse' instead.", file=sys.stderr)
             balanced = False
-        
-        if numFS == -1 : 
+
+        if numFS == -1 :
             # return all dataset
             return self.data
-            
-        elif numFS == 0 : 
+
+        elif numFS == 0 :
             # for zero shot
             return []
 
-        elif balanced :               
+        elif balanced :
             # return same amount of each class
             # only makes sense if there are few "gold" values (e.g. for DDI)
 
             # frequencies of each type
             types = Counter([x["gold"] for x in self.data])
             # balanced amout to expect
-            n = max(1,numFS//len(types))        
+            n = max(1,numFS//len(types))
 
             # start with less frequent
             examples = []
@@ -116,6 +116,44 @@ class Examples() :
             random.shuffle(examples)
             print(f"Selected {len(examples)} balanced examples", file=sys.stderr)
             return examples
+
+        elif strategy == "diverse" and self.task == "NER":
+            # Ensure all 4 drug types (drug, group, brand, drug_n) appear
+            # in the selected examples. Greedily cover missing types first,
+            # then fill remaining slots with a random selection.
+            NER_TYPES = ["drug", "group", "brand", "drug_n"]
+
+            def get_types(ex):
+                return set(re.findall(r'<(drug|group|brand|drug_n)>', ex["gold"]))
+
+            pool = list(self.data)
+            random.shuffle(pool)
+
+            selected = []
+            covered  = set()
+
+            # first pass: one example per type, preferring rarest type first
+            type_freq = Counter(t for ex in pool for t in get_types(ex))
+            for typ in sorted(NER_TYPES, key=lambda t: type_freq.get(t, 0)):
+                if typ not in covered and len(selected) < numFS:
+                    candidates = [ex for ex in pool if typ in get_types(ex)
+                                  and ex not in selected]
+                    if candidates:
+                        pick = candidates[0]
+                        selected.append(pick)
+                        covered |= get_types(pick)
+
+            # second pass: fill remaining slots randomly
+            remaining = [ex for ex in pool if ex not in selected]
+            still_needed = numFS - len(selected)
+            if still_needed > 0 and remaining:
+                selected.extend(random.sample(remaining,
+                                              min(still_needed, len(remaining))))
+
+            random.shuffle(selected)
+            covered_str = ", ".join(sorted(covered))
+            print(f"Selected {len(selected)} diverse examples covering: {covered_str}", file=sys.stderr)
+            return selected[:numFS]
 
         else:
             # return random selection

@@ -10,31 +10,40 @@ from examples import Examples
 
 # ------------ check command line and get arguments -----------------
 def get_arguments():
-    if (not 6<=len(sys.argv)<=7 or sys.argv[6] not in ["-quant", "-ollama"]):
-        print(f"Usage:  {sys.argv[0]} model prompts num_few_shot trainfile testfile [(-quant|-ollama)]", file=sys.stderr)
+    valid_flags = {"-quant", "-ollama", "-diverse"}
+    flags    = {a for a in sys.argv[1:] if a.startswith("-")}
+    pos_args = [a for a in sys.argv[1:] if not a.startswith("-")]
+
+    unknown = flags - valid_flags
+    if unknown or len(pos_args) != 5:
+        print(f"Usage:  {sys.argv[0]} model prompts num_few_shot trainfile testfile"
+              f" [-quant] [-ollama] [-diverse]", file=sys.stderr)
         sys.exit(1)
 
-    model = sys.argv[1]
-    promptfile = sys.argv[2]
-    num_few_shot = int(sys.argv[3])
-    traindata = sys.argv[4]
-    testdata = sys.argv[5]
-    quantized = (sys.argv[6]=="-quant")
-    ollama = (sys.argv[6]=="-ollama")
+    model        = pos_args[0]
+    promptfile   = pos_args[1]
+    num_few_shot = int(pos_args[2])
+    traindata    = pos_args[3]
+    testdata     = pos_args[4]
+    quantized    = "-quant"   in flags
+    ollama       = "-ollama"  in flags
+    diverse      = "-diverse" in flags
 
-    return model, promptfile, num_few_shot, traindata, testdata, quantized, ollama
+    return model, promptfile, num_few_shot, traindata, testdata, quantized, ollama, diverse
 
 
 ############## main ###################
 
 # get command line arguments
-model, promptfile, num_few_shot, traindata, testdata, quantized, ollama = get_arguments()
+model, promptfile, num_few_shot, traindata, testdata, quantized, ollama, diverse = get_arguments()
 
-print(f"========= FEW SHOT === PROMPTS={promptfile}  SHOTS={num_few_shot}  DATA={testdata} quantized={quantized}", file=sys.stderr)
+print(f"========= FEW SHOT === PROMPTS={promptfile}  SHOTS={num_few_shot}  DATA={testdata}"
+      f"  quantized={quantized}  diverse={diverse}", file=sys.stderr)
 
 # load training data (FS examples)
 trainfile = os.path.join(paths.DATA,traindata+".xml")
-fs_examples = Examples(trainfile, "NER").select_examples(num_few_shot)
+strategy  = "diverse" if diverse else "random"
+fs_examples = Examples(trainfile, "NER").select_examples(num_few_shot, strategy=strategy)
 
 # load prompts, create few-shot prompt
 prompts = Prompts(promptfile, fs_examples)
