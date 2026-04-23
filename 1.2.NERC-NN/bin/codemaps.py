@@ -27,6 +27,8 @@ FEATURE_SIZES = {
     'greek':      1,  # contains a greek letter (α, β, γ …)
     'length':     2,  # long word (>9 chars), very short word (≤2 chars)
     'spacy':      4,  # is NOUN/PROPN, is_stop, is_alpha, like_num
+    'shape':      6,  # acronym, plural-group, internal-digit, med-unit, brand-like, digit-terminal
+    'biolex':    30,  # biomedical lexical/shape cues for drug mentions
 }
 
 # Groups that reproduce the original 16-bit vector (used when 'features' is
@@ -47,6 +49,25 @@ _DRUG_PREFIXES = (
     'chlor', 'methyl', 'deoxy', 'amino', 'nitro',
 )
 _GREEK_LETTERS = set('αβγδεζηθικλμνξοπρστυφχψω')
+
+_GROUP_SUFFIXES = ('ants', 'ents', 'ers', 'ines', 'ides', 'oids', 'ates', 'ics', 'ols')
+_MED_UNITS = {'mg', 'mcg', 'kg', 'g', 'mm', 'nm', 'um', 'μm', 'iu', 'ml', 'l', 'mol', 'mmol', 'nmol'}
+_THERAPY_SUFFIXES = (
+    'mab', 'nib', 'vir', 'pril', 'sartan', 'statin', 'olol', 'cillin',
+    'mycin', 'tide', 'afil', 'azole', 'oxacin', 'cycline',
+)
+_CHEM_SUFFIXES = (
+    'acid', 'ate', 'ide', 'ium', 'one', 'ol', 'yl', 'ine', 'ane',
+    'ene', 'ose', 'ase',
+)
+_BIO_PREFIXES = (
+    'anti', 'deoxy', 'hydro', 'chloro', 'methyl', 'ethyl', 'amino',
+    'nitro', 'acetyl', 'cyclo',
+)
+_GREEK_NAMES = (
+    'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'kappa', 'lambda',
+    'omega',
+)
 
 
 class Codemaps:
@@ -312,6 +333,63 @@ class Codemaps:
             int(w.like_num),
         ]
 
+    def _feat_shape(self, form):
+        """6 bits: entity-type shape signals (brand/group/drug_n)."""
+        lcform = form.lower()
+        has_digit = any(c.isdigit() for c in form)
+        n_letters = sum(1 for c in form if c.isalpha())
+        n_upper = sum(1 for c in form if c.isupper())
+        inner = form[1:-1] if len(form) >= 3 else ''
+        return [
+            int(n_letters >= 2 and n_upper == n_letters),
+            int(any(lcform.endswith(s) for s in _GROUP_SUFFIXES) and len(lcform) >= 5),
+            int(has_digit and any(c.isdigit() for c in inner)),
+            int(lcform in _MED_UNITS),
+            int(form[:1].isupper() and form[1:].islower() and 5 <= len(form) <= 14 and not has_digit),
+            int(len(form) > 0 and form[-1].isdigit()),
+        ]
+
+    def _feat_biolex(self, w):
+        """30 bits: biomedical lexical and token-shape cues."""
+        form = w.text
+        lcform = form.lower()
+        n = len(form)
+        has_alpha = any(c.isalpha() for c in form)
+        has_digit = any(c.isdigit() for c in form)
+
+        return [
+            int(n == 1),
+            int(n <= 3),
+            int(4 <= n <= 8),
+            int(n >= 9),
+            int(n >= 13),
+            int(form.isalpha() and form.islower()),
+            int(has_alpha and any(c.isupper() for c in form) and any(c.islower() for c in form) and not form.istitle()),
+            int(sum(1 for c in form if c.isupper()) >= 2 and not form.isupper()),
+            int(n > 0 and form[0].isalpha()),
+            int(n > 0 and form[-1].isalpha()),
+            int(n > 0 and form[0].isdigit()),
+            int(n > 0 and form[-1].isdigit()),
+            int(has_digit),
+            int(has_alpha and has_digit),
+            int(bool(re.search(r'[A-Za-z][0-9]', form))),
+            int(bool(re.search(r'[0-9][A-Za-z]', form))),
+            int(bool(re.search(r'[0-9][.,][0-9]', form))),
+            int('/' in form),
+            int('+' in form),
+            int('.' in form),
+            int(any(c in ',;:' for c in form)),
+            int(any(c in '()[]{}' for c in form)),
+            int(any(c in "'\"" for c in form)),
+            int('%' in form),
+            int(any(c in _GREEK_LETTERS for c in lcform) or any(g in lcform for g in _GREEK_NAMES)),
+            int(any(lcform.endswith(s) for s in _THERAPY_SUFFIXES)),
+            int(any(lcform.endswith(s) for s in _CHEM_SUFFIXES)),
+            int(any(lcform.startswith(p) for p in _BIO_PREFIXES)),
+            int(lcform.endswith(('s', 'es')) and n >= 5),
+            int(w.pos_ in ('ADJ', 'NUM')),
+        ]
+
     # -------------------------------------------------------------------------
     # Main feature dispatcher — assembles the active feature groups in order
     # -------------------------------------------------------------------------
@@ -336,4 +414,6 @@ class Codemaps:
             elif group == 'greek':      bits += self._feat_greek(lcform)
             elif group == 'length':     bits += self._feat_length(form)
             elif group == 'spacy':      bits += self._feat_spacy(w)
+            elif group == 'shape':      bits += self._feat_shape(form)
+            elif group == 'biolex':     bits += self._feat_biolex(w)
         return bits

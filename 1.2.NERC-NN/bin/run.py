@@ -26,9 +26,9 @@ from codemaps import DEFAULT_FEATURES
 #
 ##########################################################
 
-BINDIR  = os.path.abspath(os.path.dirname(__file__))
-NERDIR  = os.path.dirname(BINDIR)
-SOLDIR  = os.path.dirname(NERDIR)
+BINDIR = os.path.abspath(os.path.dirname(__file__))
+NERDIR = os.path.dirname(BINDIR)
+SOLDIR = os.path.dirname(NERDIR)
 MAINDIR = os.path.dirname(SOLDIR)
 DATADIR = os.path.join(MAINDIR, "data")
 UTILDIR = os.path.join(MAINDIR, "util")
@@ -40,23 +40,27 @@ from evaluator import evaluate
 # Short codes used in model names to represent feature groups
 # -----------------------------------------------------------------------
 FEAT_SHORT = {
-    'ortho':      'Or',
-    'ext_full':   'EF',
-    'ext_part':   'EP',
-    'drug_morph': 'DM',
-    'greek':      'Gk',
-    'length':     'Ln',
-    'spacy':      'Sp',
+    "ortho": "Or",
+    "ext_full": "EF",
+    "ext_part": "EP",
+    "drug_morph": "DM",
+    "greek": "Gk",
+    "length": "Ln",
+    "spacy": "Sp",
+    "shape": "Sh",
+    "biolex": "BL",
 }
 
 
 def get_model_name(p):
     """Unique name encoding all varied hyperparameters."""
-    e_str = "-".join(map(str, p['emb_sizes']))
-    f_str = "".join(FEAT_SHORT.get(g, g) for g in p.get('features', DEFAULT_FEATURES))
-    s_str = str(p.get('suf_len', 5))
-    return (f"model_h{p['hidden_size']}_l{p['num_layers']}"
-            f"_d{p['dropout']}_e{e_str}_f{f_str}_s{s_str}")
+    e_str = "-".join(map(str, p["emb_sizes"]))
+    f_str = "".join(FEAT_SHORT.get(g, g) for g in p.get("features", DEFAULT_FEATURES))
+    s_str = str(p.get("suf_len", 5))
+    return (
+        f"model_h{p['hidden_size']}_l{p['num_layers']}"
+        f"_d{p['dropout']}_e{e_str}_f{f_str}_s{s_str}"
+    )
 
 
 # -----------------------------------------------------------------------
@@ -66,30 +70,30 @@ def get_model_name(p):
 # -----------------------------------------------------------------------
 
 # ===== PHASE 1: Architecture sweep (default features, suf_len=5) =====
-search_space = {
-    "hidden_size": [64, 128, 200],
-    "num_layers":  [1, 2],
-    "dropout":     [0.1, 0.2],
-    "emb_sizes":   [(100, 100, 50)],
-    "features":    [['ortho', 'ext_full', 'ext_part']],
-    "suf_len":     [5],
-}
-
-# ===== PHASE 2: Feature sweep =====
-# Set BEST_ARCH to the best config found in Phase 1, then uncomment.
-#
-# BEST_ARCH = dict(hidden_size=128, num_layers=1, dropout=0.2,
-#                  emb_sizes=(100, 100, 50))
+# (Disabled for the 1-hour end-to-end run)
 # search_space = {
-#     **{k: [v] for k, v in BEST_ARCH.items()},
-#     "features": [
-#         ['ortho', 'ext_full', 'ext_part'],                              # baseline
-#         ['ortho', 'ext_full', 'ext_part', 'drug_morph'],               # +morphology
-#         ['ortho', 'ext_full', 'ext_part', 'drug_morph', 'greek', 'length'],  # +all
-#         ['ortho', 'ext_full', 'ext_part', 'drug_morph', 'greek', 'length', 'spacy'],  # +spacy
-#     ],
+#     "hidden_size": [64, 128, 200],
+#     "num_layers": [1, 2],
+#     "dropout": [0.1, 0.2],
+#     "emb_sizes": [(100, 100, 50)],
+#     "features": [["ortho", "ext_full", "ext_part"]],
 #     "suf_len": [5],
 # }
+
+# ===== PHASE 2: Feature sweep =====
+# Fixed strong architecture to finish within 1 hour.
+BEST_ARCH = dict(hidden_size=128, num_layers=2, dropout=0.2, emb_sizes=(100, 100, 50))
+search_space = {
+    **{k: [v] for k, v in BEST_ARCH.items()},
+    "features": [
+        ["ortho", "ext_full", "ext_part"],
+        ["ortho", "ext_full", "ext_part", "drug_morph"],
+        ["ortho", "ext_full", "ext_part", "drug_morph", "greek", "length"],
+        ["ortho", "ext_full", "ext_part", "drug_morph", "greek", "length", "spacy"],
+        ["ortho", "ext_full", "ext_part", "drug_morph", "greek", "length", "spacy", "shape", "biolex"],
+    ],
+    "suf_len": [5],
+}
 
 # ===== PHASE 3: Suffix length sweep =====
 # Set BEST_FEATURES to the best feature set from Phase 2, then uncomment.
@@ -103,15 +107,65 @@ search_space = {
 
 
 # -----------------------------------------------------------------------
-# Parse command-line params  (key=value pairs, flags)
+# Parse command-line params
+# Supports both:
+#   key=value
+#   --key value
+#   --key=value
 # -----------------------------------------------------------------------
 params = {}
-for p in sys.argv[1:]:
-    if "=" in p:
-        par, val = p.split("=", 1)
-        params[par] = val
-        if par in ("batch_size", "max_len", "epochs"):
-            params[par] = int(val)
+
+_INT_KEYS = {
+    "batch_size",
+    "max_len",
+    "epochs",
+    "suf_len",
+    "hidden_size",
+    "num_layers",
+    "patience",
+    "lr_patience",
+}
+_FLOAT_KEYS = {"dropout", "lr", "weight_decay", "clip_grad", "drug_n_boost"}
+_FLOAT_KEYS |= {"label_smoothing", "min_delta", "lr_factor"}
+
+
+def _coerce_param(k, v):
+    if k in _INT_KEYS:
+        try:
+            return int(v)
+        except ValueError:
+            return v
+    if k in _FLOAT_KEYS:
+        try:
+            return float(v)
+        except ValueError:
+            return v
+    return v
+
+
+args = sys.argv[1:]
+i = 0
+while i < len(args):
+    tok = args[i]
+
+    if tok.startswith("--"):
+        key = tok[2:]
+        if "=" in key:
+            key, val = key.split("=", 1)
+        else:
+            # --key value
+            val = None
+            if i + 1 < len(args) and not args[i + 1].startswith("-"):
+                val = args[i + 1]
+                i += 1
+        if key and val is not None:
+            params[key] = _coerce_param(key, val)
+
+    elif "=" in tok:
+        key, val = tok.split("=", 1)
+        params[key] = _coerce_param(key, val)
+
+    i += 1
 
 if "name" not in params:
     params["name"] = "mymodel_000"
@@ -142,40 +196,42 @@ if "train" in sys.argv[1:]:
     os.makedirs(os.path.join(NERDIR, "models"), exist_ok=True)
 
     for h in search_space["hidden_size"]:
-      for l in search_space["num_layers"]:
-        for d in search_space["dropout"]:
-          for e in search_space["emb_sizes"]:
-            for f in search_space["features"]:
-              for s in search_space["suf_len"]:
+        for l in search_space["num_layers"]:
+            for d in search_space["dropout"]:
+                for e in search_space["emb_sizes"]:
+                    for f in search_space["features"]:
+                        for s in search_space["suf_len"]:
 
-                current_params = params.copy()
-                current_params.update({
-                    "hidden_size": h,
-                    "num_layers":  l,
-                    "dropout":     d,
-                    "emb_sizes":   e,
-                    "features":    f,
-                    "suf_len":     s,
-                })
+                            current_params = params.copy()
+                            current_params.update(
+                                {
+                                    "hidden_size": h,
+                                    "num_layers": l,
+                                    "dropout": d,
+                                    "emb_sizes": e,
+                                    "features": f,
+                                    "suf_len": s,
+                                }
+                            )
 
-                model_name = get_model_name(current_params)
-                model_path = os.path.join(NERDIR, "models", model_name)
+                            model_name = get_model_name(current_params)
+                            model_path = os.path.join(NERDIR, "models", model_name)
 
-                if os.path.exists(os.path.join(model_path, "network.nn")):
-                    print(f"Skipping {model_name} (already trained).")
-                    continue
+                            if os.path.exists(os.path.join(model_path, "network.nn")):
+                                print(f"Skipping {model_name} (already trained).")
+                                continue
 
-                print(f"\n{'='*60}\nTraining: {model_name}\n{'='*60}")
-                try:
-                    do_train(
-                        os.path.join(NERDIR, "preprocessed", "train.pck"),
-                        os.path.join(NERDIR, "preprocessed", "devel.pck"),
-                        current_params,
-                        model_path,
-                    )
-                    torch.cuda.empty_cache()
-                except Exception as err:
-                    print(f"Failed to train {model_name}: {err}")
+                            print(f"\n{'='*60}\nTraining: {model_name}\n{'='*60}")
+                            try:
+                                do_train(
+                                    os.path.join(NERDIR, "preprocessed", "train.pck"),
+                                    os.path.join(NERDIR, "preprocessed", "devel.pck"),
+                                    current_params,
+                                    model_path,
+                                )
+                                torch.cuda.empty_cache()
+                            except Exception as err:
+                                print(f"Failed to train {model_name}: {err}")
 
 
 # -----------------------------------------------------------------------
@@ -184,12 +240,15 @@ if "train" in sys.argv[1:]:
 if "predict" in sys.argv[1:]:
     os.makedirs(os.path.join(NERDIR, "results"), exist_ok=True)
     dataset_type = "test" if "test" in sys.argv[1:] else "devel"
-    out_file  = os.path.join(NERDIR, "results",  f"{dataset_type}-{params['name']}.out")
-    stat_file = os.path.join(NERDIR, "results",  f"{dataset_type}-{params['name']}.stats")
+    out_file = os.path.join(NERDIR, "results", f"{dataset_type}-{params['name']}.out")
+    stat_file = os.path.join(
+        NERDIR, "results", f"{dataset_type}-{params['name']}.stats"
+    )
     predict(
         os.path.join(NERDIR, "models", params["name"]),
         os.path.join(NERDIR, "preprocessed", f"{dataset_type}.pck"),
-        params, out_file,
+        params,
+        out_file,
     )
     evaluate("NER", os.path.join(DATADIR, f"{dataset_type}.xml"), out_file, stat_file)
 
@@ -199,7 +258,7 @@ if "predict" in sys.argv[1:]:
 # -----------------------------------------------------------------------
 if "predict_all" in sys.argv[1:]:
     os.makedirs(os.path.join(NERDIR, "results"), exist_ok=True)
-    model_dir    = os.path.join(NERDIR, "models")
+    model_dir = os.path.join(NERDIR, "models")
     dataset_type = "test" if "test" in sys.argv[1:] else "devel"
 
     if os.path.exists(model_dir):
@@ -207,17 +266,28 @@ if "predict_all" in sys.argv[1:]:
             model_path = os.path.join(model_dir, model_item)
             if not os.path.isdir(model_path):
                 continue
-            out_file  = os.path.join(NERDIR, "results", f"{dataset_type}-{model_item}.out")
-            stat_file = os.path.join(NERDIR, "results", f"{dataset_type}-{model_item}.stats")
+            out_file = os.path.join(
+                NERDIR, "results", f"{dataset_type}-{model_item}.out"
+            )
+            stat_file = os.path.join(
+                NERDIR, "results", f"{dataset_type}-{model_item}.stats"
+            )
             if os.path.exists(stat_file):
                 print(f"Skipping {model_item} (already evaluated).")
                 continue
             print(f"Predicting: {model_item}")
             try:
-                predict(model_path,
-                        os.path.join(NERDIR, "preprocessed", f"{dataset_type}.pck"),
-                        params, out_file)
-                evaluate("NER", os.path.join(DATADIR, f"{dataset_type}.xml"),
-                         out_file, stat_file)
+                predict(
+                    model_path,
+                    os.path.join(NERDIR, "preprocessed", f"{dataset_type}.pck"),
+                    params,
+                    out_file,
+                )
+                evaluate(
+                    "NER",
+                    os.path.join(DATADIR, f"{dataset_type}.xml"),
+                    out_file,
+                    stat_file,
+                )
             except Exception as err:
                 print(f"Failed to predict {model_item}: {err}")
